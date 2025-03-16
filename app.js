@@ -6,7 +6,7 @@ const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // List of players
-const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog"];
+const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog", "Large Pouch"];
 
 // Fetch Slayer XP from OSRS Hiscores API
 async function fetchSlayerXp(player) {
@@ -245,7 +245,6 @@ function delay(ms) {
 }
 
 async function main() {
-    // Delete old data before processing new data
     await deleteOldData();
 
     const totalXpData = [];
@@ -256,30 +255,32 @@ async function main() {
         const player = players[i];
         console.log(`Processing player: ${player}`);
 
-        // Check if data already exists within the last hours
+        // Check if data already exists within the last hour
         const hasData = await hasDataForLastHour(player);
+        let slayerXp;
+
         if (hasData) {
             console.log(`Data already exists for ${player} within the last hour. Skipping...`);
+            slayerXp = await fetchSlayerXp(player); // Fetch XP for totalXpData
         } else {
             // Fetch Slayer XP
-            const slayerXp = await fetchSlayerXp(player);
+            slayerXp = await fetchSlayerXp(player);
             console.log(`Fetched Slayer XP for ${player}: ${slayerXp}`);
 
             // Store XP in the database
             await storeXp(player, slayerXp);
         }
 
-        // Get the total Slayer XP for the player
-        const totalXp = await fetchSlayerXp(player);
-        totalXpData.push({ player, xp: totalXp });
+        // Use the fetched XP for totalXpData
+        totalXpData.push({ player, xp: slayerXp });
 
         // Calculate XP gains over the last 7 days
         const xpGainedLast7Days = await calculateXpGainsLast7Days(player);
         xpGainedLast7DaysData.push({ player, xp: xpGainedLast7Days });
 
-        // Add a delay of 1 second (1000 milliseconds) between requests
+        // Add a delay of 1 second between requests
         if (i < players.length - 1) {
-            await delay(1000); // Delay only if it's not the last player
+            await delay(1000);
         }
     }
 
