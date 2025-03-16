@@ -3,56 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OSRS Slayer Tracker</title>
+    <title>Now with shirt!</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #2d2d2d; /* Dark background */
-            color: #fff;
+            background-color: #121212; /* Dark background */
+            color: #ffffff; /* Light text */
             margin: 0;
             padding: 20px;
         }
-        h1 {
+        h1, h2 {
             text-align: center;
-            color: #ff7f50; /* Orange header */
-            margin-bottom: 20px;
+            color: #ffffff; /* Light text */
         }
-        .chart {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            max-width: 600px;
-            margin: 0 auto;
+        .chart-container {
+            width: 80%;
+            margin: 20px auto;
+            background-color: #1e1e1e; /* Dark container background */
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Darker shadow */
+            border-radius: 8px;
         }
-        .bar {
-            display: flex;
-            align-items: center;
-            background-color: #3a3a3a; /* Dark bar background */
-            padding: 8px;
-            border-radius: 4px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-        .bar-label {
-            flex: 1;
-            font-weight: bold;
-            color: #ff7f50; /* Orange player name */
-        }
-        .bar-details {
-            margin-left: 10px;
-            color: #ccc; /* Light gray for details */
-        }
-        .bar-fill {
-            height: 15px;
-            background-color: #ff7f50; /* Orange fill */
-            border-radius: 3px;
-            transition: width 0.5s ease;
-            margin-left: 10px; /* Add spacer between bar and details */
+        canvas {
+            max-width: 100%;
+            height: auto;
         }
     </style>
-    <script type="module" src="app.js"></script>
 </head>
 <body>
-    <h1>Passion</h1>
-    <div class="chart" id="chart"></div>
+    <div class="chart-container">
+        <h2>Passion (Last 7 Days)</h2>
+        <canvas id="xpGainedChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <h2>Total XP</h2>
+        <canvas id="totalXpChart"></canvas>
+    </div>
+
+    <script type="module" src="app.js"></script>
 </body>
 </html>

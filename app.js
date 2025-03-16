@@ -1,64 +1,290 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
+
+// Initialize Supabase client
+const supabaseUrl = "https://kjcnhuyfzftnxqygjlyn.supabase.co"; // Replace with your Supabase URL
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqY25odXlmemZ0bnhxeWdqbHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwMDMzODgsImV4cCI6MjA1NzU3OTM4OH0._PvDuxHnpE5_thdY23PVNkuXh1fzWCa-xdSxymMhK-E"; // Replace with your Supabase key
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// List of players
 const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog"];
-async function fetchSlayerLevels(player) {
+
+// Fetch Slayer XP from OSRS Hiscores API
+async function fetchSlayerXp(player) {
     try {
-        const response = await fetch(`http://localhost:3000/hiscores?player=${encodeURIComponent(player)}`);
-        const data = await response.json();
+        const response = await fetch(
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(
+                `https://services.runescape.com/m=hiscore_oldschool/index_lite.json?player=${player}`
+            )}`
+        );
+        if (!response.ok) throw new Error("Failed to fetch data");
 
-        if (!data.data) {
-            console.error(`Error fetching data for ${player}:`, data.error);
-            return { player, level: 0, xp: 0, percentage: 0 }; // Return default values for errors
-        }
-
-        const hiscores = JSON.parse(data.data);
+        const hiscores = await response.json();
         const slayerSkill = hiscores.skills.find(skill => skill.id === 19);
-        const slayerLevel = slayerSkill ? slayerSkill.level : 0;
-        const slayerXp = slayerSkill ? slayerSkill.xp : 0;
-        const percentage = (slayerXp / 200000000) * 100; // Example calculation for percentage
-
-        return { player, level: slayerLevel, xp: slayerXp, percentage };
+        return slayerSkill ? slayerSkill.xp : 0;
     } catch (error) {
-        console.error(`Error fetching data for ${player}`, error);
-        return { player, level: 0, xp: 0, percentage: 0 }; // Return default values for errors
+        console.error(`Error fetching XP for ${player}:`, error);
+        return 0;
     }
 }
 
-async function renderChart() {
-    const chart = document.getElementById("chart");
-    chart.innerHTML = ""; // Clear previous content
 
-    // Fetch data for all players
-    const playerData = await Promise.all(players.map(fetchSlayerLevels));
+// Check if data already exists in the last hour
+async function hasDataForLastHour(player) {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // Subtract 1 hour from current time
 
-    // Sort players by XP (descending)
-    playerData.sort((a, b) => b.xp - a.xp);
+    console.log(`Checking data for ${player} in the last hour (since ${oneHourAgo.toISOString()})`);
 
-    // Render bars for each player
-    playerData.forEach(({ player, level, xp, percentage }, index) => {
-        const bar = document.createElement("div");
-        bar.className = "bar";
+    try {
+        const { data, error } = await supabase
+            .from("player_xp")
+            .select("id")
+            .eq("player_name", player)
+            .gte("timestamp", oneHourAgo.toISOString()) // Check for entries in the last hour
+            .lte("timestamp", now.toISOString());
 
-        const barLabel = document.createElement("div");
-        barLabel.className = "bar-label";
-        barLabel.textContent = `${player}`; // Player name
-        if (barLabel.textContent == "flendygim"){
-            barLabel.textContent = "flendygim :(";
+        if (error) {
+            console.error(`Supabase query error for ${player}:`, error);
+            throw error;
         }
 
-        const barDetails = document.createElement("div");
-        barDetails.className = "bar-details";
-        barDetails.textContent = `${(xp / 1000000).toFixed(2)}M (${level})  `; // Simplified details
+        console.log(`Data for ${player} in the last hour:`, data);
+        return data.length > 0;
+    } catch (error) {
+        console.error(`Error checking data for ${player}:`, error);
+        return false; // Assume no data exists if there's an error
+    }
+}
 
-        const barFill = document.createElement("div");
-        barFill.className = "bar-fill";
-        barFill.style.width = `${percentage}%`;
+// Function to delete data older than 1 week
+async function deleteOldData() {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7); // Get the date 1 week ago
 
-        bar.appendChild(barLabel);
-        bar.appendChild(barDetails);
-        bar.appendChild(barFill);
-        chart.appendChild(bar);
+    console.log(`Checking for data older than ${oneWeekAgo.toISOString()}...`);
+
+    try {
+        // First, fetch the data that will be deleted
+        const { data: oldData, error: fetchError } = await supabase
+            .from("player_xp")
+            .select("id, player_name, timestamp")
+            .lt("timestamp", oneWeekAgo.toISOString()); // Find entries older than 1 week
+
+        if (fetchError) {
+            console.error("Supabase fetch error:", fetchError);
+            throw fetchError;
+        }
+
+        // If no old data is found, log and exit
+        if (oldData.length === 0) {
+            console.log("No old data found to delete.");
+            return;
+        }
+
+        // Log the data that will be deleted
+        console.log(`Deleting ${oldData.length} records older than ${oneWeekAgo.toISOString()}:`);
+        oldData.forEach(record => {
+            console.log(`- Player: ${record.player_name}, Timestamp: ${record.timestamp}`);
+        });
+
+        // Perform the deletion
+        const { error: deleteError } = await supabase
+            .from("player_xp")
+            .delete()
+            .lt("timestamp", oneWeekAgo.toISOString()); // Delete entries older than 1 week
+
+        if (deleteError) {
+            console.error("Supabase delete error:", deleteError);
+            throw deleteError;
+        }
+
+        console.log("Old data deleted successfully!");
+    } catch (error) {
+        console.error("Error deleting old data:", error);
+    }
+}
+
+// Store Slayer XP in the database
+async function storeXp(player, slayerXp) {
+    try {
+        const { error } = await supabase
+            .from("player_xp")
+            .insert([{ player_name: player, slayer_xp: slayerXp }]);
+
+        if (error) throw error;
+        console.log(`Stored XP for ${player}: ${slayerXp}`);
+    } catch (error) {
+        console.error(`Error storing XP for ${player}:`, error);
+    }
+}
+
+// Render bar charts
+let totalXpChartInstance = null;
+let xpGainedChartInstance = null;
+
+function renderBarCharts(totalXpData, xpGainedLast7DaysData) {
+    console.log("Rendering charts...");
+    console.log("Total XP Data:", totalXpData);
+    console.log("XP Gained Last 7 Days Data:", xpGainedLast7DaysData);
+
+    const ctx1 = document.getElementById("totalXpChart").getContext("2d");
+    const ctx2 = document.getElementById("xpGainedChart").getContext("2d");
+
+    if (!ctx1 || !ctx2) {
+        console.error("Canvas elements not found!");
+        return;
+    }
+
+    // Destroy existing chart instances if they exist
+    if (totalXpChartInstance) {
+        totalXpChartInstance.destroy();
+    }
+    if (xpGainedChartInstance) {
+        xpGainedChartInstance.destroy();
+    }
+
+    // Sort data in descending order
+    totalXpData.sort((a, b) => b.xp - a.xp);
+    xpGainedLast7DaysData.sort((a, b) => b.xp - a.xp);
+
+    // Total XP Chart
+    totalXpChartInstance = new Chart(ctx1, {
+        type: "bar",
+        data: {
+            labels: totalXpData.map(data => data.player),
+            datasets: [{
+                label: "Total Slayer XP",
+                data: totalXpData.map(data => data.xp),
+                backgroundColor: "rgba(54, 162, 235, 0.5)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 1,
+            }],
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: "Total Slayer XP",
+                    },
+                },
+            },
+        },
+    });
+
+    // XP Gained Last 7 Days Chart
+    xpGainedChartInstance = new Chart(ctx2, {
+        type: "bar",
+        data: {
+            labels: xpGainedLast7DaysData.map(data => data.player),
+            datasets: [{
+                label: "Slayer XP Gained (Last 7 Days)",
+                data: xpGainedLast7DaysData.map(data => data.xp),
+                backgroundColor: "rgba(255, 99, 132, 0.5)",
+                borderColor: "rgba(255, 99, 132, 1)",
+                borderWidth: 1,
+            }],
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: "Slayer XP Gained",
+                    },
+                },
+            },
+        },
     });
 }
 
-// Render the chart initially and refresh every 5 minutes
-renderChart();
-setInterval(renderChart, 5 * 60 * 1000);
+// Function to calculate XP gains over the last 7 days
+async function calculateXpGainsLast7Days(player) {
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7); // Get the date 7 days ago
+
+    try {
+        // Fetch XP data for the last 7 days
+        const { data, error } = await supabase
+            .from("player_xp")
+            .select("slayer_xp, timestamp")
+            .eq("player_name", player)
+            .gte("timestamp", sevenDaysAgo.toISOString()) // Data from the last 7 days
+            .order("timestamp", { ascending: true }); // Sort by timestamp ascending
+
+        if (error) {
+            console.error(`Supabase query error for ${player}:`, error);
+            throw error;
+        }
+
+        // If there's no data or only one entry, return 0
+        if (data.length < 2) {
+            console.log(`Not enough data to calculate XP gains for ${player}`);
+            return 0;
+        }
+
+        // Calculate the difference between the earliest and latest XP values
+        const earliestXp = data[0].slayer_xp;
+        const latestXp = data[data.length - 1].slayer_xp;
+        const xpGained = latestXp - earliestXp;
+
+        console.log(`XP gained for ${player} in the last 7 days:`, xpGained);
+        return xpGained;
+    } catch (error) {
+        console.error(`Error calculating XP gains for ${player}:`, error);
+        return 0;
+    }
+}
+
+// Utility function to introduce a delay
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function main() {
+    // Delete old data before processing new data
+    await deleteOldData();
+
+    const totalXpData = [];
+    const xpGainedLast7DaysData = [];
+    console.log("Starting Slayer XP update...");
+
+    for (let i = 0; i < players.length; i++) {
+        const player = players[i];
+        console.log(`Processing player: ${player}`);
+
+        // Check if data already exists within the last hours
+        const hasData = await hasDataForLastHour(player);
+        if (hasData) {
+            console.log(`Data already exists for ${player} within the last hour. Skipping...`);
+        } else {
+            // Fetch Slayer XP
+            const slayerXp = await fetchSlayerXp(player);
+            console.log(`Fetched Slayer XP for ${player}: ${slayerXp}`);
+
+            // Store XP in the database
+            await storeXp(player, slayerXp);
+        }
+
+        // Get the total Slayer XP for the player
+        const totalXp = await fetchSlayerXp(player);
+        totalXpData.push({ player, xp: totalXp });
+
+        // Calculate XP gains over the last 7 days
+        const xpGainedLast7Days = await calculateXpGainsLast7Days(player);
+        xpGainedLast7DaysData.push({ player, xp: xpGainedLast7Days });
+
+        // Add a delay of 1 second (1000 milliseconds) between requests
+        if (i < players.length - 1) {
+            await delay(1000); // Delay only if it's not the last player
+        }
+    }
+
+    console.log("Slayer XP update complete!");
+    renderBarCharts(totalXpData, xpGainedLast7DaysData);
+}
+// Run the script
+main();
