@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js";
+const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase client
 const supabaseUrl = "https://kjcnhuyfzftnxqygjlyn.supabase.co"; // Replace with your Supabase URL
