@@ -1,35 +1,10 @@
-// Check if running in Node.js or the browser
-const isNode = typeof process !== 'undefined' && process.versions?.node;
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
 
-let createClient;
-if (isNode) {
-  // Running in Node.js: use require
-  const { createClient: supabaseCreateClient } = require('@supabase/supabase-js');
-  createClient = supabaseCreateClient;
-} else {
-  // Running in the browser: use import
-  import('https://esm.sh/@supabase/supabase-js').then((module) => {
-    createClient = module.createClient;
-    initializeSupabase();
-  }).catch((err) => {
-    console.error('Failed to load Supabase client:', err);
-  });
-}
+// Initialize Supabase client
+const supabaseUrl = "https://kjcnhuyfzftnxqygjlyn.supabase.co"; // Replace with your Supabase URL
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqY25odXlmemZ0bnhxeWdqbHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwMDMzODgsImV4cCI6MjA1NzU3OTM4OH0._PvDuxHnpE5_thdY23PVNkuXh1fzWCa-xdSxymMhK-E"; // Replace with your Supabase key
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Initialize Supabase
-function initializeSupabase() {
-  const supabaseUrl = "https://kjcnhuyfzftnxqygjlyn.supabase.co";
-  const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqY25odXlmemZ0bnhxeWdqbHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwMDMzODgsImV4cCI6MjA1NzU3OTM4OH0._PvDuxHnpE5_thdY23PVNkuXh1fzWCa-xdSxymMhK-E"; // Replace with your Supabase key
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  // Your Supabase logic here
-  console.log('Supabase client initialized:', supabase);
-}
-
-// If running in Node.js, initialize Supabase immediately
-if (isNode) {
-  initializeSupabase();
-}
 // List of players
 const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog", "Large Pouch"];
 
