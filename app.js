@@ -230,47 +230,63 @@ function delay(ms) {
 }
 
 async function main() {
-    await deleteOldData();
+    try {
+        // Show loading indicator
+        showLoadingIndicator();
 
-    const totalXpData = [];
-    const xpGainedLast7DaysData = [];
-    console.log("Starting Slayer XP update...");
+        await deleteOldData();
 
-    for (let i = 0; i < players.length; i++) {
-        const player = players[i];
-        console.log(`Processing player: ${player}`);
+        const totalXpData = [];
+        const xpGainedLast7DaysData = [];
+        console.log("Starting Slayer XP update...");
 
-        // Check if data already exists within the last hour
-        const hasData = await hasDataForLastHour(player);
-        let slayerXp;
+        for (let i = 0; i < players.length; i++) {
+            const player = players[i];
+            console.log(`Processing player: ${player}`);
 
-        if (hasData) {
-            console.log(`Data already exists for ${player} within the last hour. Skipping...`);
-            slayerXp = await fetchSlayerXp(player); // Fetch XP for totalXpData
-        } else {
-            // Fetch Slayer XP
-            slayerXp = await fetchSlayerXp(player);
-            console.log(`Fetched Slayer XP for ${player}: ${slayerXp}`);
+            // Check if data already exists within the last hour
+            const hasData = await hasDataForLastHour(player);
+            let slayerXp;
 
-            // Store XP in the database
-            await storeXp(player, slayerXp);
+            if (hasData) {
+                console.log(`Data already exists for ${player} within the last hour. Skipping...`);
+                slayerXp = await fetchSlayerXp(player); // Fetch XP for totalXpData
+            } else {
+                // Fetch Slayer XP
+                slayerXp = await fetchSlayerXp(player);
+                console.log(`Fetched Slayer XP for ${player}: ${slayerXp}`);
+
+                // Store XP in the database
+                await storeXp(player, slayerXp);
+            }
+
+            // Use the fetched XP for totalXpData
+            totalXpData.push({ player, xp: slayerXp });
+
+            // Calculate XP gains over the last 7 days
+            const xpGainedLast7Days = await calculateXpGainsLast7Days(player);
+            xpGainedLast7DaysData.push({ player, xp: xpGainedLast7Days });
+
+            // Add a delay of 1 second between requests
+            if (i < players.length - 1) {
+                await delay(1000);
+            }
         }
 
-        // Use the fetched XP for totalXpData
-        totalXpData.push({ player, xp: slayerXp });
+        console.log("Slayer XP update complete!");
+        renderBarCharts(totalXpData, xpGainedLast7DaysData);
 
-        // Calculate XP gains over the last 7 days
-        const xpGainedLast7Days = await calculateXpGainsLast7Days(player);
-        xpGainedLast7DaysData.push({ player, xp: xpGainedLast7Days });
-
-        // Add a delay of 1 second between requests
-        if (i < players.length - 1) {
-            await delay(1000);
+    } catch (error) {
+        console.error("Error in main function:", error);
+        // Update loading indicator to show error message
+        const loadingIndicator = document.getElementById("loading-indicator");
+        if (loadingIndicator) {
+            loadingIndicator.innerHTML = `<p style="color: red;">Error fetching data. Please try again later.</p>`;
         }
+    } finally {
+        // Hide loading indicator
+        hideLoadingIndicator();
     }
-
-    console.log("Slayer XP update complete!");
-    renderBarCharts(totalXpData, xpGainedLast7DaysData);
 }
 // Run the script
 main();
