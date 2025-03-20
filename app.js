@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog", "Large Pouch"];
 
 // Fetch Slayer XP from OSRS Hiscores API
-async function fetchSlayerXp(player) {
+async function fetchSlayerXp(player, retries = 3, delayMs = 1000) {
     try {
         const response = await fetch(
             `https://api.allorigins.win/raw?url=${encodeURIComponent(
@@ -20,9 +20,22 @@ async function fetchSlayerXp(player) {
 
         const hiscores = await response.json();
         const slayerSkill = hiscores.skills.find(skill => skill.id === 19);
-        return slayerSkill ? slayerSkill.xp : 0;
+        const slayerXp = slayerSkill ? slayerSkill.xp : 0;
+
+        if (slayerXp === 0 && retries > 0) {
+            console.log(`Retrying fetch for ${player}, attempts left: ${retries}`);
+            await delay(delayMs); // Add delay between retries
+            return fetchSlayerXp(player, retries - 1, delayMs);
+        }
+
+        return slayerXp;
     } catch (error) {
         console.error(`Error fetching XP for ${player}:`, error);
+        if (retries > 0) {
+            console.log(`Retrying fetch for ${player}, attempts left: ${retries}`);
+            await delay(delayMs); // Add delay between retries
+            return fetchSlayerXp(player, retries - 1, delayMs);
+        }
         return 0;
     }
 }
@@ -31,28 +44,21 @@ async function fetchSlayerXp(player) {
 // Check if data already exists in the last hour
 async function hasDataForLastHour(player) {
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // Subtract 1 hour from current time
-
-    console.log(`Checking data for ${player} in the last hour (since ${oneHourAgo.toISOString()})`);
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
     try {
         const { data, error } = await supabase
             .from("player_xp")
             .select("id")
             .eq("player_name", player)
-            .gte("timestamp", oneHourAgo.toISOString()) // Check for entries in the last hour
-            .lte("timestamp", now.toISOString());
+            .gte("timestamp", oneHourAgo.toISOString())
+            .limit(1); // Only fetch one record
 
-        if (error) {
-            console.error(`Supabase query error for ${player}:`, error);
-            throw error;
-        }
-
-        console.log(`Data for ${player} in the last hour:`, data);
+        if (error) throw error;
         return data.length > 0;
     } catch (error) {
         console.error(`Error checking data for ${player}:`, error);
-        return false; // Assume no data exists if there's an error
+        return false;
     }
 }
 
@@ -123,81 +129,60 @@ let totalXpChartInstance = null;
 let xpGainedChartInstance = null;
 
 function renderBarCharts(totalXpData, xpGainedLast7DaysData) {
-    console.log("Rendering charts...");
-    console.log("Total XP Data:", totalXpData);
-    console.log("XP Gained Last 7 Days Data:", xpGainedLast7DaysData);
-
-    const ctx1 = document.getElementById("totalXpChart").getContext("2d");
-    const ctx2 = document.getElementById("xpGainedChart").getContext("2d");
+    const ctx1 = document.getElementById("totalXpChart")?.getContext("2d");
+    const ctx2 = document.getElementById("xpGainedChart")?.getContext("2d");
 
     if (!ctx1 || !ctx2) {
         console.error("Canvas elements not found!");
         return;
     }
 
-    // Destroy existing chart instances if they exist
-    if (totalXpChartInstance) {
-        totalXpChartInstance.destroy();
-    }
-    if (xpGainedChartInstance) {
-        xpGainedChartInstance.destroy();
-    }
-
     // Sort data in descending order
     totalXpData.sort((a, b) => b.xp - a.xp);
     xpGainedLast7DaysData.sort((a, b) => b.xp - a.xp);
 
-    // Total XP Chart
-    totalXpChartInstance = new Chart(ctx1, {
-        type: "bar",
-        data: {
-            labels: totalXpData.map(data => data.player),
-            datasets: [{
-                label: "Total Slayer XP",
-                data: totalXpData.map(data => data.xp),
-                backgroundColor: "rgba(54, 162, 235, 0.5)",
-                borderColor: "rgba(54, 162, 235, 1)",
-                borderWidth: 1,
-            }],
-        },
-        options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: "Total Slayer XP",
-                    },
-                },
+    // Update or create charts
+    if (!totalXpChartInstance) {
+        totalXpChartInstance = new Chart(ctx1, {
+            type: "bar",
+            data: {
+                labels: totalXpData.map(data => data.player),
+                datasets: [{
+                    label: "Total Slayer XP",
+                    data: totalXpData.map(data => data.xp),
+                    backgroundColor: "rgba(54, 162, 235, 0.5)",
+                    borderColor: "rgba(54, 162, 235, 1)",
+                    borderWidth: 1,
+                }],
             },
-        },
-    });
+            options: { scales: { y: { beginAtZero: true } } },
+        });
+    } else {
+        totalXpChartInstance.data.labels = totalXpData.map(data => data.player);
+        totalXpChartInstance.data.datasets[0].data = totalXpData.map(data => data.xp);
+        totalXpChartInstance.update();
+    }
 
-    // XP Gained Last 7 Days Chart
-    xpGainedChartInstance = new Chart(ctx2, {
-        type: "bar",
-        data: {
-            labels: xpGainedLast7DaysData.map(data => data.player),
-            datasets: [{
-                label: "Slayer XP Gained (Last 7 Days)",
-                data: xpGainedLast7DaysData.map(data => data.xp),
-                backgroundColor: "rgba(255, 99, 132, 0.5)",
-                borderColor: "rgba(255, 99, 132, 1)",
-                borderWidth: 1,
-            }],
-        },
-        options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: "Slayer XP Gained",
-                    },
-                },
+    if (!xpGainedChartInstance) {
+        xpGainedChartInstance = new Chart(ctx2, {
+            type: "bar",
+            data: {
+                labels: xpGainedLast7DaysData.map(data => data.player),
+                datasets: [{
+                    label: "Slayer XP Gained (Last 7 Days)",
+                    data: xpGainedLast7DaysData.map(data => data.xp),
+                    backgroundColor: "rgba(255, 99, 132, 0.5)",
+                    borderColor: "rgba(255, 99, 132, 1)",
+                    borderWidth: 1,
+                }],
             },
-        },
-    });
+            options: { scales: { y: { beginAtZero: true } } },
+        });
+    } else {
+        xpGainedChartInstance.data.labels = xpGainedLast7DaysData.map(data => data.player);
+        xpGainedChartInstance.data.datasets[0].data = xpGainedLast7DaysData.map(data => data.xp);
+        xpGainedChartInstance.update();
+    }
 }
 
 // Function to calculate XP gains over the last 7 days
