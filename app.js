@@ -229,6 +229,22 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Function to show the loading indicator
+function showLoadingIndicator() {
+    const loadingIndicator = document.getElementById("loading-indicator");
+    if (loadingIndicator) {
+        loadingIndicator.style.display = "block";
+    }
+}
+
+// Function to hide the loading indicator
+function hideLoadingIndicator() {
+    const loadingIndicator = document.getElementById("loading-indicator");
+    if (loadingIndicator) {
+        loadingIndicator.style.display = "none";
+    }
+}
+
 async function main() {
     try {
         // Show loading indicator
