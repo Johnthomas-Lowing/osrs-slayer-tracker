@@ -41,24 +41,19 @@ function initSkillFilter() {
   const filter = document.getElementById("skillFilter");
   if (!filter) return;
 
-  // Clear existing options
+  // Clear and add options
   filter.innerHTML = '<option value="all">All Skills</option>';
-
-  // Add skill options
   skillData.forEach(skill => {
     const option = document.createElement("option");
     option.value = skill.key;
-    option.textContent = skill.name.charAt(0).toUpperCase() + skill.name.slice(1); // Capitalize
+    option.textContent = skill.name;
     filter.appendChild(option);
   });
 
-  // Set initial state
-  currentSkillFilter = "all";
-  
-  // Add event listener
+  // Add change handler
   filter.addEventListener("change", (e) => {
     currentSkillFilter = e.target.value;
-    updateFilteredChart();
+    updateXpGainedChart();
   });
 }
 
@@ -77,33 +72,26 @@ function getFilteredData() {
   });
 }
 
-// Update the chart with filtered data
-function updateFilteredChart() {
-  const filteredData = getFilteredData();
-  
-  // Recreate the chart with filtered data
+function updateXpGainedChart() {
+  const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
+  if (!ctx || !rawXpGainedData.length) return;
+
   if (xpGainedChartInstance) {
     xpGainedChartInstance.destroy();
   }
 
-  const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
-  if (!ctx) return;
-
   const datasets = currentSkillFilter === "all" 
     ? skillData.map(skill => ({
         label: skill.name,
-        data: filteredData.map(p => p.xpGains[skill.key] || 0),
+        data: rawXpGainedData.map(p => p.xpGains[skill.key] || 0),
         backgroundColor: getOsrsPastelColor(skill.name),
         borderColor: getOsrsBorderColor(skill.name),
         borderWidth: 1
       }))
     : [{
-        label: skillData.find(s => s.key === currentSkillFilter)?.name || "Skill",
-        data: filteredData.map(p => p.xpGains[currentSkillFilter] || 0),
+        label: skillData.find(s => s.key === currentSkillFilter)?.name,
+        data: rawXpGainedData.map(p => p.xpGains[currentSkillFilter] || 0),
         backgroundColor: getOsrsPastelColor(
-          skillData.find(s => s.key === currentSkillFilter)?.name || ""
-        ),
-        borderColor: getOsrsBorderColor(
           skillData.find(s => s.key === currentSkillFilter)?.name || ""
         ),
         borderWidth: 1
@@ -112,7 +100,7 @@ function updateFilteredChart() {
   xpGainedChartInstance = new Chart(ctx, {
     type: "bar",
     data: {
-      labels: filteredData.map(data => data.player),
+      labels: rawXpGainedData.map(data => data.player),
       datasets: datasets
     },
     options: {
@@ -126,36 +114,12 @@ function updateFilteredChart() {
             display: true,
             text: currentSkillFilter === "all" 
               ? 'XP Gained (Last 7 Days)' 
-              : `${skillData.find(s => s.key === currentSkillFilter)?.name || "Skill"} XP Gained`
+              : `${skillData.find(s => s.key === currentSkillFilter)?.name} XP Gained`
           }
         }
       },
       plugins: {
-        legend: { display: currentSkillFilter === "all" },
-        // In updateFilteredChart's options:
-        tooltip: {
-          callbacks: {
-            title: (items) => {
-              const total = items.reduce((sum, item) => sum + item.raw, 0);
-              const skillName = currentSkillFilter === "all" 
-                ? "Total" 
-                : skillData.find(s => s.key === currentSkillFilter)?.name || "Skill";
-              return `${items[0].label}: ${total.toLocaleString()} ${skillName} XP`;
-            },
-            afterBody: (context) => {
-              if (currentSkillFilter !== "all") {
-                return null; // No breakdown for single skill
-              }
-              const playerData = rawXpGainedData.find(p => p.player === context[0].label);
-              if (!playerData) return null;
-              
-              return skillData
-                .filter(skill => playerData.xpGains[skill.key] > 0)
-                .sort((a, b) => playerData.xpGains[b.key] - playerData.xpGains[a.key])
-                .map(skill => `• ${skill.name}: ${playerData.xpGains[skill.key].toLocaleString()} XP`);
-            }
-          }
-        }
+        legend: { display: false } // Keep legend hidden as requested
       }
     }
   });
@@ -299,15 +263,10 @@ let xpGainedChartInstance = null;
 
 function renderCharts(totalXpData, xpGainedData) {
     const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
-    const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
+    if (!totalXpCtx) return;
 
-    if (!totalXpCtx || !xpGainedCtx) return;
-
-    // Destroy previous instances
     if (totalXpChartInstance) totalXpChartInstance.destroy();
-    if (xpGainedChartInstance) xpGainedChartInstance.destroy();
-
-    // 1. Bottom Graph - Total XP (Simple Bar Chart)
+    
     totalXpChartInstance = new Chart(totalXpCtx, {
         type: "bar",
         data: {
@@ -315,7 +274,7 @@ function renderCharts(totalXpData, xpGainedData) {
             datasets: [{
                 label: "Total XP",
                 data: totalXpData.map(data => data.totalXp),
-                backgroundColor: "#5b9bd533", // Semi-transparent blue
+                backgroundColor: "#5b9bd533",
                 borderColor: "#41719c",
                 borderWidth: 1
             }]
@@ -327,58 +286,11 @@ function renderCharts(totalXpData, xpGainedData) {
                     beginAtZero: true,
                     title: { display: true, text: 'Total XP' }
                 }
-            },
-            plugins: {
-                legend: { display: true } // Keep legend for total XP
             }
         }
     });
 
-    // 2. Top Graph - XP Gained (Stacked by Skill)
-    xpGainedChartInstance = new Chart(xpGainedCtx, {
-        type: "bar",
-        data: {
-            labels: xpGainedData.map(data => data.player),
-            datasets: skillData.map(skill => ({
-                label: skill.name,
-                data: xpGainedData.map(p => p.xpGains[skill.key] || 0),
-                backgroundColor: getOsrsPastelColor(skill.name),
-                borderColor: getOsrsBorderColor(skill.name),
-                borderWidth: 1
-            }))
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: { stacked: true },
-                y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    title: { display: true, text: 'XP Gained (Last 7 Days)' }
-                }
-            },
-            plugins: {
-                legend: { display: false }, // Remove the legend
-                tooltip: {
-                    callbacks: {
-                        title: (items) => `${items[0].label}: ${items.reduce((sum, item) => sum + item.raw, 0).toLocaleString()} XP`,
-                        afterBody: (context) => {
-                            const playerData = xpGainedData[context[0].dataIndex];
-                            return skillData
-                                .map(skill => {
-                                    const xp = playerData.xpGains[skill.key];
-                                    return xp > 0 ? 
-                                        `• ${skill.name}: ${xp.toLocaleString()} XP` : 
-                                        null;
-                                })
-                                .filter(Boolean);
-                        }
-                    }
-                }
-            }
-        }
-    });
-    updateFilteredChart();
+    updateXpGainedChart();
 }
 
 // OSRS-inspired pastel colors
