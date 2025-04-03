@@ -4,6 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js";
 const supabaseUrl = "https://kjcnhuyfzftnxqygjlyn.supabase.co"; // Replace with your Supabase URL
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqY25odXlmemZ0bnhxeWdqbHluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIwMDMzODgsImV4cCI6MjA1NzU3OTM4OH0._PvDuxHnpE5_thdY23PVNkuXh1fzWCa-xdSxymMhK-E"; // Replace with your Supabase key
 const supabase = createClient(supabaseUrl, supabaseKey);
+let currentSkillFilter = "all";
+let rawXpGainedData = []; // Store the unfiltered data
 
 // List of players
 const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog", "Large Pouch"];
@@ -34,6 +36,131 @@ const skillData = [
     { id: 22, name: "hunter", key: "hunter_xp" },
     { id: 23, name: "construction", key: "construction_xp" }
 ];
+
+function initSkillFilter() {
+  const filter = document.getElementById("skillFilter");
+  if (!filter) return;
+
+  // Clear existing options
+  filter.innerHTML = '<option value="all">All Skills</option>';
+
+  // Add skill options
+  skillData.forEach(skill => {
+    const option = document.createElement("option");
+    option.value = skill.key;
+    option.textContent = skill.name.charAt(0).toUpperCase() + skill.name.slice(1); // Capitalize
+    filter.appendChild(option);
+  });
+
+  // Set initial state
+  currentSkillFilter = "all";
+  
+  // Add event listener
+  filter.addEventListener("change", (e) => {
+    currentSkillFilter = e.target.value;
+    updateFilteredChart();
+  });
+}
+
+// Filter the data based on selected skill
+function getFilteredData() {
+  if (currentSkillFilter === "all") return rawXpGainedData;
+
+  return rawXpGainedData.map(playerData => {
+    const filteredGains = {};
+    filteredGains[currentSkillFilter] = playerData.xpGains[currentSkillFilter] || 0;
+    
+    return {
+      player: playerData.player,
+      xpGains: filteredGains
+    };
+  });
+}
+
+// Update the chart with filtered data
+function updateFilteredChart() {
+  const filteredData = getFilteredData();
+  
+  // Recreate the chart with filtered data
+  if (xpGainedChartInstance) {
+    xpGainedChartInstance.destroy();
+  }
+
+  const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
+  if (!ctx) return;
+
+  const datasets = currentSkillFilter === "all" 
+    ? skillData.map(skill => ({
+        label: skill.name,
+        data: filteredData.map(p => p.xpGains[skill.key] || 0),
+        backgroundColor: getOsrsPastelColor(skill.name),
+        borderColor: getOsrsBorderColor(skill.name),
+        borderWidth: 1
+      }))
+    : [{
+        label: skillData.find(s => s.key === currentSkillFilter)?.name || "Skill",
+        data: filteredData.map(p => p.xpGains[currentSkillFilter] || 0),
+        backgroundColor: getOsrsPastelColor(
+          skillData.find(s => s.key === currentSkillFilter)?.name || ""
+        ),
+        borderColor: getOsrsBorderColor(
+          skillData.find(s => s.key === currentSkillFilter)?.name || ""
+        ),
+        borderWidth: 1
+      }];
+
+  xpGainedChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: filteredData.map(data => data.player),
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { stacked: currentSkillFilter === "all" },
+        y: {
+          stacked: currentSkillFilter === "all",
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: currentSkillFilter === "all" 
+              ? 'XP Gained (Last 7 Days)' 
+              : `${skillData.find(s => s.key === currentSkillFilter)?.name || "Skill"} XP Gained`
+          }
+        }
+      },
+      plugins: {
+        legend: { display: currentSkillFilter === "all" },
+        // In updateFilteredChart's options:
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const total = items.reduce((sum, item) => sum + item.raw, 0);
+              const skillName = currentSkillFilter === "all" 
+                ? "Total" 
+                : skillData.find(s => s.key === currentSkillFilter)?.name || "Skill";
+              return `${items[0].label}: ${total.toLocaleString()} ${skillName} XP`;
+            },
+            afterBody: (context) => {
+              if (currentSkillFilter !== "all") {
+                return null; // No breakdown for single skill
+              }
+              const playerData = rawXpGainedData.find(p => p.player === context[0].label);
+              if (!playerData) return null;
+              
+              return skillData
+                .filter(skill => playerData.xpGains[skill.key] > 0)
+                .sort((a, b) => playerData.xpGains[b.key] - playerData.xpGains[a.key])
+                .map(skill => `• ${skill.name}: ${playerData.xpGains[skill.key].toLocaleString()} XP`);
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 
 // Fetch all skills from OSRS Hiscores API
 async function fetchPlayerSkills(player, retries = 3, delayMs = 1000) {
@@ -164,10 +291,16 @@ async function storePlayerSkills(player, skills) {
         console.error(`Error storing skills for ${player}:`, error);
     }
 }
-const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
-const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
+
+
+// Chart instances at the top level
+let totalXpChartInstance = null;
+let xpGainedChartInstance = null;
+
 function renderCharts(totalXpData, xpGainedData) {
-    
+    const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
+    const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
+
     if (!totalXpCtx || !xpGainedCtx) return;
 
     // Destroy previous instances
@@ -245,6 +378,7 @@ function renderCharts(totalXpData, xpGainedData) {
             }
         }
     });
+    updateFilteredChart();
 }
 
 // OSRS-inspired pastel colors
@@ -360,37 +494,37 @@ function hideLoadingIndicator() {
     }
 }
 
+
+
 async function main() {
     try {
         showLoadingIndicator();
         await deleteOldData();
+        initSkillFilter(); // Initialize the filter dropdown
 
         const totalXpData = [];
-        const xpGainedLast7DaysData = [];
+        rawXpGainedData = []; // Store unfiltered data globally
         
         for (let i = 0; i < players.length; i++) {
             const player = players[i];
             const hasData = await hasDataForLastHour(player);
             
-            // Fetch skills only once per player
             const skills = await fetchPlayerSkills(player);
             
             if (!hasData) {
                 await storePlayerSkills(player, skills);
             }
 
-            // Calculate gains using the already-fetched skills
-            // (No need to fetch again from API)
             const xpGains = await calculateXpGainsLast7Days(player);
             const totalXp = Object.values(skills).reduce((sum, xp) => sum + (xp || 0), 0);
             
             totalXpData.push({ player, totalXp });
-            xpGainedLast7DaysData.push({ player, xpGains });
+            rawXpGainedData.push({ player, xpGains });
 
             if (i < players.length - 1) await delay(1000);
         }
 
-        renderCharts(totalXpData, xpGainedLast7DaysData);
+        renderCharts(totalXpData, rawXpGainedData);
         
     } catch (error) {
         console.error("Error in main function:", error);
