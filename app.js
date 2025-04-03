@@ -165,50 +165,77 @@ async function storePlayerSkills(player, skills) {
     }
 }
 
-// Render bar charts
+// Render both charts
 let totalXpChartInstance = null;
 let xpGainedChartInstance = null;
 
-function renderStackedXpGainedChart(xpGainedData) {
-    const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
-    if (!ctx) return;
-
-    // Destroy previous chart instance if it exists
-    if (xpGainedChartInstance) {
-        xpGainedChartInstance.destroy();
+function renderCharts(totalXpData, xpGainedData) {
+    const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
+    const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
+    
+    if (!totalXpCtx || !xpGainedCtx) {
+        console.error("Canvas elements not found!");
+        return;
     }
 
-    // Prepare dataset for each skill
-    const datasets = skillData.map(skill => {
-        // Use a color palette that matches OSRS skills
-        const color = getSkillColor(skill.name);
-        return {
-            label: skill.name,
-            data: xpGainedData.map(playerData => playerData.xpGains[skill.key] || 0),
-            backgroundColor: color,
-            borderColor: color,
-            borderWidth: 1
-        };
-    });
+    // Destroy previous instances if they exist
+    if (totalXpChartInstance) totalXpChartInstance.destroy();
+    if (xpGainedChartInstance) xpGainedChartInstance.destroy();
 
-    xpGainedChartInstance = new Chart(ctx, {
+    // 1. Bottom Graph - Total XP (Simple Bar Chart)
+    totalXpChartInstance = new Chart(totalXpCtx, {
         type: "bar",
         data: {
-            labels: xpGainedData.map(data => data.player),
-            datasets: datasets
+            labels: totalXpData.map(data => data.player),
+            datasets: [{
+                label: "Total XP",
+                data: totalXpData.map(data => data.totalXp),
+                backgroundColor: "rgba(54, 162, 235, 0.7)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 1
+            }]
         },
         options: {
             responsive: true,
             scales: {
-                x: {
-                    stacked: true,
-                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Total XP'
+                    }
+                }
+            }
+        }
+    });
+
+    // 2. Top Graph - XP Gained Last 7 Days (Stacked by Skill)
+    const skillDatasets = skillData.map(skill => {
+        return {
+            label: skill.name,
+            data: xpGainedData.map(playerData => playerData.xpGains[skill.key] || 0),
+            backgroundColor: getSkillColor(skill.name),
+            borderColor: getSkillColor(skill.name),
+            borderWidth: 1
+        };
+    });
+
+    xpGainedChartInstance = new Chart(xpGainedCtx, {
+        type: "bar",
+        data: {
+            labels: xpGainedData.map(data => data.player),
+            datasets: skillDatasets
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { stacked: true },
                 y: {
                     stacked: true,
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'XP Gained'
+                        text: 'XP Gained (Last 7 Days)'
                     }
                 }
             },
@@ -216,7 +243,6 @@ function renderStackedXpGainedChart(xpGainedData) {
                 tooltip: {
                     callbacks: {
                         afterBody: function(context) {
-                            // Show detailed XP breakdown in tooltip
                             const playerData = xpGainedData[context[0].dataIndex];
                             return skillData.map(skill => {
                                 const xp = playerData.xpGains[skill.key];
@@ -318,6 +344,7 @@ async function main() {
         showLoadingIndicator();
         await deleteOldData();
 
+        const totalXpData = [];
         const xpGainedLast7DaysData = [];
         
         for (let i = 0; i < players.length; i++) {
@@ -331,16 +358,15 @@ async function main() {
             }
 
             const xpGains = await calculateXpGainsLast7Days(player);
-            xpGainedLast7DaysData.push({
-                player,
-                xpGains,
-                totalXp: Object.values(skills).reduce((sum, xp) => sum + xp, 0)
-            });
+            const totalXp = Object.values(skills).reduce((sum, xp) => sum + xp, 0);
+            
+            totalXpData.push({ player, totalXp });
+            xpGainedLast7DaysData.push({ player, xpGains });
 
             if (i < players.length - 1) await delay(1000);
         }
 
-        renderStackedXpGainedChart(xpGainedLast7DaysData);
+        renderCharts(totalXpData, xpGainedLast7DaysData);
         
     } catch (error) {
         console.error("Error in main function:", error);
