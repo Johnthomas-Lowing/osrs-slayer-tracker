@@ -164,10 +164,9 @@ async function storePlayerSkills(player, skills) {
         console.error(`Error storing skills for ${player}:`, error);
     }
 }
-
+const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
+const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
 function renderCharts(totalXpData, xpGainedData) {
-    const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
-    const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
     
     if (!totalXpCtx || !xpGainedCtx) return;
 
@@ -373,14 +372,17 @@ async function main() {
             const player = players[i];
             const hasData = await hasDataForLastHour(player);
             
+            // Fetch skills only once per player
             const skills = await fetchPlayerSkills(player);
             
             if (!hasData) {
                 await storePlayerSkills(player, skills);
             }
 
+            // Calculate gains using the already-fetched skills
+            // (No need to fetch again from API)
             const xpGains = await calculateXpGainsLast7Days(player);
-            const totalXp = Object.values(skills).reduce((sum, xp) => sum + xp, 0);
+            const totalXp = Object.values(skills).reduce((sum, xp) => sum + (xp || 0), 0);
             
             totalXpData.push({ player, totalXp });
             xpGainedLast7DaysData.push({ player, xpGains });
@@ -392,7 +394,10 @@ async function main() {
         
     } catch (error) {
         console.error("Error in main function:", error);
-        // Error handling...
+        const loadingIndicator = document.getElementById("loading-indicator");
+        if (loadingIndicator) {
+            loadingIndicator.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+        }
     } finally {
         hideLoadingIndicator();
     }
