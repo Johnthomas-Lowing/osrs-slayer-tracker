@@ -50,10 +50,10 @@ async function fetchPlayerSkills(player, retries = 3, delayMs = 1000) {
         
         skillData.forEach(skill => {
             const skillInfo = hiscores.skills.find(s => s.id === skill.id);
-            // Convert from tenths of XP to actual XP
-            skills[skill.key] = skillInfo ? Math.floor(skillInfo.xp / 10) : 0;
+            skills[skill.key] = skillInfo ? skillInfo.xp : 0;
         });
 
+        // If all skills are 0 and we have retries left
         if (Object.values(skills).every(xp => xp === 0) && retries > 0) {
             console.log(`Retrying fetch for ${player}, attempts left: ${retries}`);
             await delay(delayMs);
@@ -64,10 +64,15 @@ async function fetchPlayerSkills(player, retries = 3, delayMs = 1000) {
     } catch (error) {
         console.error(`Error fetching skills for ${player}:`, error);
         if (retries > 0) {
+            console.log(`Retrying fetch for ${player}, attempts left: ${retries}`);
             await delay(delayMs);
             return fetchPlayerSkills(player, retries - 1, delayMs);
         }
-        return skillData.reduce((acc, skill) => ({ ...acc, [skill.key]: 0 }), {});
+        // Return object with all skills as 0 if failed
+        return skillData.reduce((acc, skill) => {
+            acc[skill.key] = 0;
+            return acc;
+        }, {});
     }
 }
 
