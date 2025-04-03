@@ -7,8 +7,38 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        @font-face {
+            font-family: 'RuneScape UF';
+            src: url('https://cdn.runescape.com/fonts/runechat.woff2') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+        }
+        .osrs-text {
+            font-family: 'RuneScape UF', Arial, sans-serif;
+            font-size: 18px;
+            color: #ff981f; /* OSRS gold color */
+            text-shadow: 1px 1px 1px #000;
+        }
+
+        .osrs-dropdown {
+            font-family: 'RuneScape UF', Arial, sans-serif;
+            font-size: 16px;
+            background-color: #1e1e1e;
+            color: #ff981f;
+            border: 2px solid #3a3a3a;
+            border-radius: 4px;
+            padding: 5px 10px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
         body {
-            font-family: Arial, sans-serif;
             background-color: #121212;
             color: #ffffff;
             margin: 0;
@@ -80,9 +110,15 @@
 
     <!-- Chart containers -->
     <div class="chart-container">
-        <h2>XP Gained (Last 7 Days)</h2>
-        <canvas id="xpGainedChart"></canvas>
+    <div class="chart-header">
+        <select id="skillFilter" class="osrs-dropdown">
+            <option value="all">All</option>
+            <!-- Options will be added by JavaScript -->
+        </select>
+        <span class="osrs-text">XP Gained (Last 7 Days)</span>
     </div>
+    <canvas id="xpGainedChart"></canvas>
+</div>
 
     <div class="chart-container">
         <h2>Total XP</h2>

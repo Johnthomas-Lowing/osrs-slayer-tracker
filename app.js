@@ -42,7 +42,7 @@ function initSkillFilter() {
   if (!filter) return;
 
   // Clear and add options
-  filter.innerHTML = '<option value="all">All Skills</option>';
+  filter.innerHTML = '<option value="all">All</option>';
   skillData.forEach(skill => {
     const option = document.createElement("option");
     option.value = skill.key;
@@ -80,6 +80,17 @@ function updateXpGainedChart() {
     xpGainedChartInstance.destroy();
   }
 
+  // Get the current skill name
+  const currentSkillName = currentSkillFilter === "all" 
+    ? "All" 
+    : skillData.find(s => s.key === currentSkillFilter)?.name || "Skill";
+
+  // Update the visible text
+  const headerText = document.querySelector(".chart-header .osrs-text");
+  if (headerText) {
+    headerText.textContent = `${currentSkillName} XP Gained (Last 7 Days)`;
+  }
+
   const datasets = currentSkillFilter === "all" 
     ? skillData.map(skill => ({
         label: skill.name,
@@ -89,11 +100,9 @@ function updateXpGainedChart() {
         borderWidth: 1
       }))
     : [{
-        label: skillData.find(s => s.key === currentSkillFilter)?.name,
+        label: currentSkillName,
         data: rawXpGainedData.map(p => p.xpGains[currentSkillFilter] || 0),
-        backgroundColor: getOsrsPastelColor(
-          skillData.find(s => s.key === currentSkillFilter)?.name || ""
-        ),
+        backgroundColor: getOsrsPastelColor(currentSkillName.toLowerCase()),
         borderWidth: 1
       }];
 
@@ -111,15 +120,12 @@ function updateXpGainedChart() {
           stacked: currentSkillFilter === "all",
           beginAtZero: true,
           title: {
-            display: true,
-            text: currentSkillFilter === "all" 
-              ? 'XP Gained (Last 7 Days)' 
-              : `${skillData.find(s => s.key === currentSkillFilter)?.name} XP Gained`
+            display: false // We'll handle this in the header now
           }
         }
       },
       plugins: {
-        legend: { display: false } // Keep legend hidden as requested
+        legend: { display: false }
       }
     }
   });
