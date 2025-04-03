@@ -165,20 +165,13 @@ async function storePlayerSkills(player, skills) {
     }
 }
 
-// Render both charts
-let totalXpChartInstance = null;
-let xpGainedChartInstance = null;
-
 function renderCharts(totalXpData, xpGainedData) {
     const totalXpCtx = document.getElementById("totalXpChart")?.getContext("2d");
     const xpGainedCtx = document.getElementById("xpGainedChart")?.getContext("2d");
     
-    if (!totalXpCtx || !xpGainedCtx) {
-        console.error("Canvas elements not found!");
-        return;
-    }
+    if (!totalXpCtx || !xpGainedCtx) return;
 
-    // Destroy previous instances if they exist
+    // Destroy previous instances
     if (totalXpChartInstance) totalXpChartInstance.destroy();
     if (xpGainedChartInstance) xpGainedChartInstance.destroy();
 
@@ -190,8 +183,8 @@ function renderCharts(totalXpData, xpGainedData) {
             datasets: [{
                 label: "Total XP",
                 data: totalXpData.map(data => data.totalXp),
-                backgroundColor: "rgba(54, 162, 235, 0.7)",
-                borderColor: "rgba(54, 162, 235, 1)",
+                backgroundColor: "#5b9bd533", // Semi-transparent blue
+                borderColor: "#41719c",
                 borderWidth: 1
             }]
         },
@@ -200,31 +193,27 @@ function renderCharts(totalXpData, xpGainedData) {
             scales: {
                 y: {
                     beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Total XP'
-                    }
+                    title: { display: true, text: 'Total XP' }
                 }
+            },
+            plugins: {
+                legend: { display: true } // Keep legend for total XP
             }
         }
     });
 
-    // 2. Top Graph - XP Gained Last 7 Days (Stacked by Skill)
-    const skillDatasets = skillData.map(skill => {
-        return {
-            label: skill.name,
-            data: xpGainedData.map(playerData => playerData.xpGains[skill.key] || 0),
-            backgroundColor: getSkillColor(skill.name),
-            borderColor: getSkillColor(skill.name),
-            borderWidth: 1
-        };
-    });
-
+    // 2. Top Graph - XP Gained (Stacked by Skill)
     xpGainedChartInstance = new Chart(xpGainedCtx, {
         type: "bar",
         data: {
             labels: xpGainedData.map(data => data.player),
-            datasets: skillDatasets
+            datasets: skillData.map(skill => ({
+                label: skill.name,
+                data: xpGainedData.map(p => p.xpGains[skill.key] || 0),
+                backgroundColor: getOsrsPastelColor(skill.name),
+                borderColor: getOsrsBorderColor(skill.name),
+                borderWidth: 1
+            }))
         },
         options: {
             responsive: true,
@@ -233,21 +222,24 @@ function renderCharts(totalXpData, xpGainedData) {
                 y: {
                     stacked: true,
                     beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'XP Gained (Last 7 Days)'
-                    }
+                    title: { display: true, text: 'XP Gained (Last 7 Days)' }
                 }
             },
             plugins: {
+                legend: { display: false }, // Remove the legend
                 tooltip: {
                     callbacks: {
-                        afterBody: function(context) {
+                        title: (items) => `${items[0].label}: ${items.reduce((sum, item) => sum + item.raw, 0).toLocaleString()} XP`,
+                        afterBody: (context) => {
                             const playerData = xpGainedData[context[0].dataIndex];
-                            return skillData.map(skill => {
-                                const xp = playerData.xpGains[skill.key];
-                                return xp > 0 ? `${skill.name}: ${xp.toLocaleString()} XP` : null;
-                            }).filter(Boolean);
+                            return skillData
+                                .map(skill => {
+                                    const xp = playerData.xpGains[skill.key];
+                                    return xp > 0 ? 
+                                        `• ${skill.name}: ${xp.toLocaleString()} XP` : 
+                                        null;
+                                })
+                                .filter(Boolean);
                         }
                     }
                 }
@@ -256,34 +248,64 @@ function renderCharts(totalXpData, xpGainedData) {
     });
 }
 
-// OSRS skill colors (you can customize these)
-function getSkillColor(skillName) {
+// OSRS-inspired pastel colors
+function getOsrsPastelColor(skillName) {
     const colors = {
-        attack: '#990000',
-        strength: '#ff0000',
-        defence: '#0066cc',
-        hitpoints: '#ff9900',
-        ranged: '#66cc00',
-        prayer: '#ffff00',
-        magic: '#800080',
-        cooking: '#cc6600',
-        woodcutting: '#663300',
-        fletching: '#996633',
-        fishing: '#3399ff',
-        firemaking: '#ff6600',
-        crafting: '#cc99ff',
-        smithing: '#999999',
-        mining: '#666666',
-        herblore: '#009900',
-        agility: '#0099cc',
-        thieving: '#663399',
-        slayer: '#000000',
-        farming: '#33cc33',
-        runecraft: '#ccffff',
-        hunter: '#66cc99',
-        construction: '#cc9966'
+        attack: '#e6b8b8',     // Soft red
+        strength: '#f4cccc',   // Lighter red
+        defence: '#b8d3e6',   // Soft blue
+        hitpoints: '#ffe599',  // Pale yellow
+        ranged: '#d9ead3',     // Mint green
+        prayer: '#fff2cc',     // Pale gold
+        magic: '#d5a6bd',      // Soft purple
+        cooking: '#f9cb9c',    // Peach
+        woodcutting: '#d9d2e9', // Lavender
+        fletching: '#cfe2f3',  // Light blue
+        fishing: '#a2c4c9',    // Seafoam
+        firemaking: '#f4b183',  // Salmon
+        crafting: '#d5a6bd',    // Soft purple
+        smithing: '#d9d9d9',    // Light gray
+        mining: '#b7b7b7',      // Medium gray
+        herblore: '#b6d7a8',    // Sage green
+        agility: '#a4c2f4',     // Sky blue
+        thieving: '#c27ba0',    // Soft magenta
+        slayer: '#999999',      // Dark gray
+        farming: '#93c47d',     // Green
+        runecraft: '#b4a7d6',   // Periwinkle
+        hunter: '#a2c4c9',      // Seafoam (same as fishing)
+        construction: '#d5a6bd' // Soft purple (same as crafting)
     };
-    return colors[skillName] || '#cccccc';
+    return colors[skillName.toLowerCase()] || '#cccccc';
+}
+
+// Slightly darker borders for contrast
+function getOsrsBorderColor(skillName) {
+    const colors = {
+        attack: '#cc7a7a',
+        strength: '#e6b8b8',
+        defence: '#8ab8e6',
+        hitpoints: '#ffd966',
+        ranged: '#b6d7a8',
+        prayer: '#ffe599',
+        magic: '#c27ba0',
+        cooking: '#f9b77d',
+        woodcutting: '#b4a7d6',
+        fletching: '#9fc5e8',
+        fishing: '#76a5af',
+        firemaking: '#e69138',
+        crafting: '#c27ba0',
+        smithing: '#b7b7b7',
+        mining: '#999999',
+        herblore: '#93c47d',
+        agility: '#6d9eeb',
+        thieving: '#a64d79',
+        slayer: '#666666',
+        farming: '#6aa84f',
+        runecraft: '#8e7cc3',
+        hunter: '#76a5af',
+        construction: '#c27ba0'
+    };
+    return colors[skillName.toLowerCase()] || '#999999';
 }
 
 async function calculateXpGainsLast7Days(player) {
