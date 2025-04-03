@@ -8,8 +8,35 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // List of players
 const players = ["UIM_Soj", "flendygim", "jund guy", "manfoxturtle", "formud", "Karl Vog", "Large Pouch"];
 
-// Fetch Slayer XP from OSRS Hiscores API
-async function fetchSlayerXp(player, retries = 3, delayMs = 1000) {
+// Skill IDs and names mapping (OSRS hiscores order)
+const skillData = [
+    { id: 0, name: "attack", key: "attack_xp" },
+    { id: 1, name: "defence", key: "defence_xp" },
+    { id: 2, name: "strength", key: "strength_xp" },
+    { id: 3, name: "hitpoints", key: "hitpoints_xp" },
+    { id: 4, name: "ranged", key: "ranged_xp" },
+    { id: 5, name: "prayer", key: "prayer_xp" },
+    { id: 6, name: "magic", key: "magic_xp" },
+    { id: 7, name: "cooking", key: "cooking_xp" },
+    { id: 8, name: "woodcutting", key: "woodcutting_xp" },
+    { id: 9, name: "fletching", key: "fletching_xp" },
+    { id: 10, name: "fishing", key: "fishing_xp" },
+    { id: 11, name: "firemaking", key: "firemaking_xp" },
+    { id: 12, name: "crafting", key: "crafting_xp" },
+    { id: 13, name: "smithing", key: "smithing_xp" },
+    { id: 14, name: "mining", key: "mining_xp" },
+    { id: 15, name: "herblore", key: "herblore_xp" },
+    { id: 16, name: "agility", key: "agility_xp" },
+    { id: 17, name: "thieving", key: "thieving_xp" },
+    { id: 18, name: "slayer", key: "slayer_xp" },
+    { id: 19, name: "farming", key: "farming_xp" },
+    { id: 20, name: "runecraft", key: "runecraft_xp" },
+    { id: 21, name: "hunter", key: "hunter_xp" },
+    { id: 22, name: "construction", key: "construction_xp" }
+];
+
+// Fetch all skills from OSRS Hiscores API
+async function fetchPlayerSkills(player, retries = 3, delayMs = 1000) {
     try {
         const response = await fetch(
             `https://api.allorigins.win/raw?url=${encodeURIComponent(
@@ -19,24 +46,33 @@ async function fetchSlayerXp(player, retries = 3, delayMs = 1000) {
         if (!response.ok) throw new Error("Failed to fetch data");
 
         const hiscores = await response.json();
-        const slayerSkill = hiscores.skills.find(skill => skill.id === 19);
-        const slayerXp = slayerSkill ? slayerSkill.xp : 0;
+        const skills = {};
+        
+        skillData.forEach(skill => {
+            const skillInfo = hiscores.skills.find(s => s.id === skill.id);
+            skills[skill.key] = skillInfo ? skillInfo.xp : 0;
+        });
 
-        if (slayerXp === 0 && retries > 0) {
+        // If all skills are 0 and we have retries left
+        if (Object.values(skills).every(xp => xp === 0) && retries > 0) {
             console.log(`Retrying fetch for ${player}, attempts left: ${retries}`);
-            await delay(delayMs); // Add delay between retries
-            return fetchSlayerXp(player, retries - 1, delayMs);
+            await delay(delayMs);
+            return fetchPlayerSkills(player, retries - 1, delayMs);
         }
 
-        return slayerXp;
+        return skills;
     } catch (error) {
-        console.error(`Error fetching XP for ${player}:`, error);
+        console.error(`Error fetching skills for ${player}:`, error);
         if (retries > 0) {
             console.log(`Retrying fetch for ${player}, attempts left: ${retries}`);
-            await delay(delayMs); // Add delay between retries
-            return fetchSlayerXp(player, retries - 1, delayMs);
+            await delay(delayMs);
+            return fetchPlayerSkills(player, retries - 1, delayMs);
         }
-        return 0;
+        // Return object with all skills as 0 if failed
+        return skillData.reduce((acc, skill) => {
+            acc[skill.key] = 0;
+            return acc;
+        }, {});
     }
 }
 
@@ -110,17 +146,22 @@ async function deleteOldData() {
     }
 }
 
-// Store Slayer XP in the database
-async function storeXp(player, slayerXp) {
+// Store all skills in the database
+async function storePlayerSkills(player, skills) {
     try {
+        const dataToInsert = {
+            player_name: player,
+            ...skills
+        };
+
         const { error } = await supabase
             .from("player_xp")
-            .insert([{ player_name: player, slayer_xp: slayerXp }]);
+            .insert([dataToInsert]);
 
         if (error) throw error;
-        console.log(`Stored XP for ${player}: ${slayerXp}`);
+        console.log(`Stored skills for ${player}:`, skills);
     } catch (error) {
-        console.error(`Error storing XP for ${player}:`, error);
+        console.error(`Error storing skills for ${player}:`, error);
     }
 }
 
@@ -128,99 +169,126 @@ async function storeXp(player, slayerXp) {
 let totalXpChartInstance = null;
 let xpGainedChartInstance = null;
 
-function renderBarCharts(totalXpData, xpGainedLast7DaysData) {
-    const ctx1 = document.getElementById("totalXpChart")?.getContext("2d");
-    const ctx2 = document.getElementById("xpGainedChart")?.getContext("2d");
+function renderStackedXpGainedChart(xpGainedData) {
+    const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
+    if (!ctx) return;
 
-    if (!ctx1 || !ctx2) {
-        console.error("Canvas elements not found!");
-        return;
+    // Destroy previous chart instance if it exists
+    if (xpGainedChartInstance) {
+        xpGainedChartInstance.destroy();
     }
 
-    // Sort data in descending order
-    totalXpData.sort((a, b) => b.xp - a.xp);
-    xpGainedLast7DaysData.sort((a, b) => b.xp - a.xp);
+    // Prepare dataset for each skill
+    const datasets = skillData.map(skill => {
+        // Use a color palette that matches OSRS skills
+        const color = getSkillColor(skill.name);
+        return {
+            label: skill.name,
+            data: xpGainedData.map(playerData => playerData.xpGains[skill.key] || 0),
+            backgroundColor: color,
+            borderColor: color,
+            borderWidth: 1
+        };
+    });
 
-    // Update or create charts
-    if (!totalXpChartInstance) {
-        totalXpChartInstance = new Chart(ctx1, {
-            type: "bar",
-            data: {
-                labels: totalXpData.map(data => data.player),
-                datasets: [{
-                    label: "Total Slayer XP",
-                    data: totalXpData.map(data => data.xp),
-                    backgroundColor: "rgba(54, 162, 235, 0.5)",
-                    borderColor: "rgba(54, 162, 235, 1)",
-                    borderWidth: 1,
-                }],
+    xpGainedChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: xpGainedData.map(data => data.player),
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'XP Gained'
+                    }
+                }
             },
-            options: { scales: { y: { beginAtZero: true } } },
-        });
-    } else {
-        totalXpChartInstance.data.labels = totalXpData.map(data => data.player);
-        totalXpChartInstance.data.datasets[0].data = totalXpData.map(data => data.xp);
-        totalXpChartInstance.update();
-    }
-
-    if (!xpGainedChartInstance) {
-        xpGainedChartInstance = new Chart(ctx2, {
-            type: "bar",
-            data: {
-                labels: xpGainedLast7DaysData.map(data => data.player),
-                datasets: [{
-                    label: "Slayer XP Gained (Last 7 Days)",
-                    data: xpGainedLast7DaysData.map(data => data.xp),
-                    backgroundColor: "rgba(255, 99, 132, 0.5)",
-                    borderColor: "rgba(255, 99, 132, 1)",
-                    borderWidth: 1,
-                }],
-            },
-            options: { scales: { y: { beginAtZero: true } } },
-        });
-    } else {
-        xpGainedChartInstance.data.labels = xpGainedLast7DaysData.map(data => data.player);
-        xpGainedChartInstance.data.datasets[0].data = xpGainedLast7DaysData.map(data => data.xp);
-        xpGainedChartInstance.update();
-    }
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(context) {
+                            // Show detailed XP breakdown in tooltip
+                            const playerData = xpGainedData[context[0].dataIndex];
+                            return skillData.map(skill => {
+                                const xp = playerData.xpGains[skill.key];
+                                return xp > 0 ? `${skill.name}: ${xp.toLocaleString()} XP` : null;
+                            }).filter(Boolean);
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
-// Function to calculate XP gains over the last 7 days
+// OSRS skill colors (you can customize these)
+function getSkillColor(skillName) {
+    const colors = {
+        attack: '#990000',
+        strength: '#ff0000',
+        defence: '#0066cc',
+        hitpoints: '#ff9900',
+        ranged: '#66cc00',
+        prayer: '#ffff00',
+        magic: '#800080',
+        cooking: '#cc6600',
+        woodcutting: '#663300',
+        fletching: '#996633',
+        fishing: '#3399ff',
+        firemaking: '#ff6600',
+        crafting: '#cc99ff',
+        smithing: '#999999',
+        mining: '#666666',
+        herblore: '#009900',
+        agility: '#0099cc',
+        thieving: '#663399',
+        slayer: '#000000',
+        farming: '#33cc33',
+        runecraft: '#ccffff',
+        hunter: '#66cc99',
+        construction: '#cc9966'
+    };
+    return colors[skillName] || '#cccccc';
+}
+
 async function calculateXpGainsLast7Days(player) {
     const today = new Date();
     const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(today.getDate() - 7); // Get the date 7 days ago
+    sevenDaysAgo.setDate(today.getDate() - 7);
 
     try {
-        // Fetch XP data for the last 7 days
         const { data, error } = await supabase
             .from("player_xp")
-            .select("slayer_xp, timestamp")
+            .select("*")
             .eq("player_name", player)
-            .gte("timestamp", sevenDaysAgo.toISOString()) // Data from the last 7 days
-            .order("timestamp", { ascending: true }); // Sort by timestamp ascending
+            .gte("timestamp", sevenDaysAgo.toISOString())
+            .order("timestamp", { ascending: true });
 
-        if (error) {
-            console.error(`Supabase query error for ${player}:`, error);
-            throw error;
-        }
+        if (error) throw error;
 
-        // If there's no data or only one entry, return 0
-        if (data.length < 2) {
-            console.log(`Not enough data to calculate XP gains for ${player}`);
-            return 0;
-        }
+        if (data.length < 2) return {};
 
-        // Calculate the difference between the earliest and latest XP values
-        const earliestXp = data[0].slayer_xp;
-        const latestXp = data[data.length - 1].slayer_xp;
-        const xpGained = latestXp - earliestXp;
+        const xpGains = {};
+        const earliest = data[0];
+        const latest = data[data.length - 1];
 
-        console.log(`XP gained for ${player} in the last 7 days:`, xpGained);
-        return xpGained;
+        skillData.forEach(skill => {
+            xpGains[skill.key] = Math.max(0, latest[skill.key] - earliest[skill.key]);
+        });
+
+        return xpGains;
     } catch (error) {
         console.error(`Error calculating XP gains for ${player}:`, error);
-        return 0;
+        return {};
     }
 }
 
@@ -247,60 +315,37 @@ function hideLoadingIndicator() {
 
 async function main() {
     try {
-        // Show loading indicator
         showLoadingIndicator();
-
         await deleteOldData();
 
-        const totalXpData = [];
         const xpGainedLast7DaysData = [];
-        console.log("Starting Slayer XP update...");
-
+        
         for (let i = 0; i < players.length; i++) {
             const player = players[i];
-            console.log(`Processing player: ${player}`);
-
-            // Check if data already exists within the last hour
             const hasData = await hasDataForLastHour(player);
-            let slayerXp;
-
-            if (hasData) {
-                console.log(`Data already exists for ${player} within the last hour. Skipping...`);
-                slayerXp = await fetchSlayerXp(player); // Fetch XP for totalXpData
-            } else {
-                // Fetch Slayer XP
-                slayerXp = await fetchSlayerXp(player);
-                console.log(`Fetched Slayer XP for ${player}: ${slayerXp}`);
-
-                // Store XP in the database
-                await storeXp(player, slayerXp);
+            
+            const skills = await fetchPlayerSkills(player);
+            
+            if (!hasData) {
+                await storePlayerSkills(player, skills);
             }
 
-            // Use the fetched XP for totalXpData
-            totalXpData.push({ player, xp: slayerXp });
+            const xpGains = await calculateXpGainsLast7Days(player);
+            xpGainedLast7DaysData.push({
+                player,
+                xpGains,
+                totalXp: Object.values(skills).reduce((sum, xp) => sum + xp, 0)
+            });
 
-            // Calculate XP gains over the last 7 days
-            const xpGainedLast7Days = await calculateXpGainsLast7Days(player);
-            xpGainedLast7DaysData.push({ player, xp: xpGainedLast7Days });
-
-            // Add a delay of 1 second between requests
-            if (i < players.length - 1) {
-                await delay(1000);
-            }
+            if (i < players.length - 1) await delay(1000);
         }
 
-        console.log("Slayer XP update complete!");
-        renderBarCharts(totalXpData, xpGainedLast7DaysData);
-
+        renderStackedXpGainedChart(xpGainedLast7DaysData);
+        
     } catch (error) {
         console.error("Error in main function:", error);
-        // Update loading indicator to show error message
-        const loadingIndicator = document.getElementById("loading-indicator");
-        if (loadingIndicator) {
-            loadingIndicator.innerHTML = `<p style="color: red;">Error fetching data. Please try again later.</p>`;
-        }
+        // Error handling...
     } finally {
-        // Hide loading indicator
         hideLoadingIndicator();
     }
 }
