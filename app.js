@@ -38,46 +38,21 @@ const skillData = [
 ];
 
 function initSkillFilter() {
-    const container = document.querySelector('.skill-tiles');
-    if (!container) return;
+  const filter = document.getElementById("skillFilter");
+  if (!filter) return;
 
-    // Clear existing tiles (keeping 'All' tile)
-    const allTile = container.querySelector('[data-skill="all"]');
-    container.innerHTML = '';
-    container.appendChild(allTile);
+  filter.innerHTML = '<option value="all">All</option>';
+  skillData.forEach(skill => {
+    const option = document.createElement("option");
+    option.value = skill.key;
+    option.textContent = skill.name;
+    filter.appendChild(option);
+  });
 
-    // Add skill tiles
-    skillData.forEach(skill => {
-        const tile = document.createElement('div');
-        tile.className = 'skill-tile';
-        tile.dataset.skill = skill.key;
-        
-        tile.innerHTML = `
-            <img src="https://oldschool.runescape.wiki/images/${skill.name}_icon.png" alt="${skill.name}">
-            <span>${skill.name}</span>
-        `;
-        
-        tile.addEventListener('click', () => {
-            // Update active state
-            document.querySelectorAll('.skill-tile').forEach(t => t.classList.remove('active'));
-            tile.classList.add('active');
-            
-            // Update filter and chart
-            currentSkillFilter = skill.key;
-            updateXpGainedChart();
-        });
-        
-        container.appendChild(tile);
-    });
-
-    // Add click handler for "All" tile
-    const allSkillTile = container.querySelector('[data-skill="all"]');
-    allSkillTile.addEventListener('click', () => {
-        document.querySelectorAll('.skill-tile').forEach(t => t.classList.remove('active'));
-        allSkillTile.classList.add('active');
-        currentSkillFilter = "all";
-        updateXpGainedChart();
-    });
+  filter.addEventListener("change", (e) => {
+    currentSkillFilter = e.target.value;
+    updateXpGainedChart();
+  });
 }
 
 // Filter the data based on selected skill
@@ -96,50 +71,53 @@ function getFilteredData() {
 }
 
 function updateXpGainedChart() {
-    const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
-    if (!ctx || !rawXpGainedData.length) return;
+  const ctx = document.getElementById("xpGainedChart")?.getContext("2d");
+  if (!ctx || !rawXpGainedData.length) return;
 
-    if (xpGainedChartInstance) {
-        xpGainedChartInstance.destroy();
-    }
+  if (xpGainedChartInstance) {
+    xpGainedChartInstance.destroy();
+  }
 
-    const datasets = currentSkillFilter === "all" 
-        ? skillData.map(skill => ({
-            label: skill.name,
-            data: rawXpGainedData.map(p => p.xpGains[skill.key] || 0),
-            backgroundColor: getOsrsPastelColor(skill.name),
-            borderColor: getOsrsBorderColor(skill.name),
-            borderWidth: 1
-        }))
-        : [{
-            label: skillData.find(s => s.key === currentSkillFilter)?.name,
-            data: rawXpGainedData.map(p => p.xpGains[currentSkillFilter] || 0),
-            backgroundColor: getOsrsPastelColor(
-                skillData.find(s => s.key === currentSkillFilter)?.name.toLowerCase() || ""
-            ),
-            borderWidth: 1
-        }];
+  const datasets = currentSkillFilter === "all" 
+    ? skillData.map(skill => ({
+        label: skill.name,
+        data: rawXpGainedData.map(p => p.xpGains[skill.key] || 0),
+        backgroundColor: getOsrsPastelColor(skill.name),
+        borderColor: getOsrsBorderColor(skill.name),
+        borderWidth: 1
+      }))
+    : [{
+        label: skillData.find(s => s.key === currentSkillFilter)?.name || "Skill",
+        data: rawXpGainedData.map(p => p.xpGains[currentSkillFilter] || 0),
+        backgroundColor: getOsrsPastelColor(
+          skillData.find(s => s.key === currentSkillFilter)?.name || ""
+        ),
+        borderWidth: 1
+      }];
 
-    xpGainedChartInstance = new Chart(ctx, {
-        type: "bar",
-        data: {
-            labels: rawXpGainedData.map(data => data.player),
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: { stacked: currentSkillFilter === "all" },
-                y: {
-                    stacked: currentSkillFilter === "all",
-                    beginAtZero: true
-                }
-            },
-            plugins: {
-                legend: { display: false }
-            }
+  xpGainedChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: rawXpGainedData.map(data => data.player),
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { stacked: currentSkillFilter === "all" },
+        y: {
+          stacked: currentSkillFilter === "all",
+          beginAtZero: true,
+          title: {
+            display: false // We handle this in the header now
+          }
         }
-    });
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
 }
 
 
