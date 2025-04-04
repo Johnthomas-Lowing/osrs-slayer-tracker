@@ -41,7 +41,6 @@ function initSkillFilter() {
   const filter = document.getElementById("skillFilter");
   if (!filter) return;
 
-  // Clear and add options
   filter.innerHTML = '<option value="all">All</option>';
   skillData.forEach(skill => {
     const option = document.createElement("option");
@@ -50,7 +49,6 @@ function initSkillFilter() {
     filter.appendChild(option);
   });
 
-  // Add change handler
   filter.addEventListener("change", (e) => {
     currentSkillFilter = e.target.value;
     updateXpGainedChart();
@@ -80,17 +78,6 @@ function updateXpGainedChart() {
     xpGainedChartInstance.destroy();
   }
 
-  // Get the current skill name
-  const currentSkillName = currentSkillFilter === "all" 
-    ? "All" 
-    : skillData.find(s => s.key === currentSkillFilter)?.name || "Skill";
-
-  // Update the visible text
-  const headerText = document.querySelector(".chart-header .osrs-text");
-  if (headerText) {
-    headerText.textContent = `${currentSkillName} XP Gained (Last 7 Days)`;
-  }
-
   const datasets = currentSkillFilter === "all" 
     ? skillData.map(skill => ({
         label: skill.name,
@@ -100,9 +87,11 @@ function updateXpGainedChart() {
         borderWidth: 1
       }))
     : [{
-        label: currentSkillName,
+        label: skillData.find(s => s.key === currentSkillFilter)?.name || "Skill",
         data: rawXpGainedData.map(p => p.xpGains[currentSkillFilter] || 0),
-        backgroundColor: getOsrsPastelColor(currentSkillName.toLowerCase()),
+        backgroundColor: getOsrsPastelColor(
+          skillData.find(s => s.key === currentSkillFilter)?.name || ""
+        ),
         borderWidth: 1
       }];
 
@@ -120,7 +109,7 @@ function updateXpGainedChart() {
           stacked: currentSkillFilter === "all",
           beginAtZero: true,
           title: {
-            display: false // We'll handle this in the header now
+            display: false // We handle this in the header now
           }
         }
       },

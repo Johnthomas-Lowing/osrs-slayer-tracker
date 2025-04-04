@@ -8,11 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @font-face {
-            font-family: 'RuneScape UF';
-            src: url('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://cdn.runescape.com/fonts/runechat.woff2')) format('woff2');
-            font-weight: normal;
-            font-style: normal;
+          font-family: 'RuneScape UF';
+          /* Using a known working mirror */
+          src: url('https://fonts.cdnfonts.com/css/runescape-uf') format('woff2'),
+               url('https://www.1001fonts.com/download/font/runescape-uf.woff2') format('woff2');
+          font-weight: normal;
+          font-style: normal;
         }
+
         .osrs-text {
             font-family: 'RuneScape UF', Arial, sans-serif;
             font-size: 18px;
